@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 
 var Hapi = require('hapi')
+const Hoek = require('hoek');
+const Wreck = require('wreck');
+
 var plugin = require('../index')
 var good = require('good')
 var loggerOptions = require('../lib/logger-options')
@@ -10,6 +13,7 @@ var port = parseInt(process.env.CORSPROXY_PORT || process.env.PORT || 1337, 10)
 var host = (process.env.CORSPROXY_HOST || 'localhost');
 var maxPayload = parseInt(process.env.CORSPROXY_MAX_PAYLOAD || 1048576, 10)
 var proxy = server.connection({ port: port, labels: ['proxy'], host: host})
+let lastauth = "Basic QWRtaW5pc3RyYXRvcjppdGN0ZXN0";
 
 server.register(require('inert'), function () {})
 server.register(require('h2o2'), function () {})
@@ -31,11 +35,13 @@ server.register({
 
 // proxy route
 proxy.route({
-  method: '*',
+  method: 'OPTIONS',
   path: '/{host}/{path*}',
   handler: {
     proxy: {
       passThrough: true,
+      rejectUnauthorized:false,      
+      xforward:true,      
       mapUri: function (request, callback) {
         request.host = request.params.host
         request.path = request.path.substr(request.params.host.length + 1)
@@ -44,7 +50,48 @@ proxy.route({
         var scheme = request.url.scheme
         console.log('proxy to https://' + request.host + request.path)
         callback(null, 'https://' + request.host + request.path + query, request.headers)
-      }
+      },
+
+    }
+  },
+  config: {
+    payload: {
+      maxBytes: maxPayload
+    }
+  }
+})
+
+proxy.route({
+  method: 'POST',
+  path: '/{host}/{path*}',
+  handler: {
+    proxy: {
+      passThrough: true,
+      localStatePassThrough: true,      
+      rejectUnauthorized:false,      
+      xforward:true,      
+      mapUri: function (request, callback) {
+        request.host = request.params.host
+        request.path = request.path.substr(request.params.host.length + 1)
+        request.headers['host'] = request.host
+              
+        if(request.headers.authorization === undefined)      
+            request.headers['Authorization'] = lastauth
+        else
+            lastauth = request.headers.authorization.replace('EXT', 'Basic');
+              
+		console.log("query ->", request.url.search);
+		console.log("Request ->", request.headers);
+        
+        var query = request.url.search  ? request.url.search : ''
+        if(request.path !== '/Thingworx/Things/Keysight.Login.Search/Services/UserLogin')
+            query = query == '?Login=EXT' ?  '' : query
+
+        var scheme = request.url.scheme
+        console.log('proxy to https://' , request.path)
+        callback(null, 'https://' + request.host + request.path + query, request.headers)
+      },
+
     }
   },
   config: {
