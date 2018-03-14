@@ -85,8 +85,7 @@ proxy.route({
 		console.log("Request ->", request.headers);
         
         var query = request.url.search  ? request.url.search : ''
-//        if(request.path !== '/Thingworx/Things/Keysight.Login.Search/Services/UserLogin')
-            query = query == '?Login=EXT' ?  '' : query
+        query = query == '?Login=EXT' ?  '' : query
 
 		console.log("query ->", query);
         var scheme = request.url.scheme
